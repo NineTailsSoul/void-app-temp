@@ -8,7 +8,7 @@ export default function CatalogScreen({ navigation }) {
       <Button 
         title="Go to Episode Details" 
         color="#6366f1"
-        onPress={() => navigation.navigate('Details')} 
+        onPress={() => navigation.navigate('Search')} 
       />
     </View>
   );
