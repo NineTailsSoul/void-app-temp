@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import Video from 'react-native-video';
 import { api } from '../api/apiService';
-import { shieldExtractor } from '../services/shieldExtractor';
-import { processSecureStream } from '../services/decryptor';
+// UPDATED IMPORT PATHS:
+import { shieldExtractor } from '../crypto/shieldExtractor';
+import { processSecureStream } from '../crypto/decryptor';
 
 export default function PlayerScreen({ route }) {
   const { episodeId } = route.params;

@@ -1,24 +1,22 @@
 import { apiClient } from './apiClient';
-
-const CONFIG = { defaultSource: 'voidanime', defaultStreamMode: 'sub' };
-const DEV_SECRET = 'aryan';
-
-const appendSecret = (url) => {
-  if (!DEV_SECRET) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}secret=${DEV_SECRET}`;
-};
+import { APP_CONFIG, ENDPOINTS } from '../config/env';
 
 export const api = {
-  searchAnime: async (query) => {
+  getDiscover: async () => {
     try {
-      return await apiClient.get(appendSecret(`/search?q=${encodeURIComponent(query)}`));
+      return await apiClient.get(ENDPOINTS.discover());
     } catch { return []; }
   },
 
-  getEpisodes: async (id, source = CONFIG.defaultSource) => {
+  searchAnime: async (query) => {
     try {
-      const data = await apiClient.get(appendSecret(`/episodes?id=${encodeURIComponent(id)}&source=${source}`));
+      return await apiClient.get(ENDPOINTS.search(query));
+    } catch { return []; }
+  },
+
+  getEpisodes: async (id, source = APP_CONFIG.DEFAULT_SOURCE) => {
+    try {
+      const data = await apiClient.get(ENDPOINTS.episodes(id, source));
       if (data) {
         return Object.entries(data).map(([epKey, epDetails]) => ({
             id: epDetails.id,
@@ -29,17 +27,15 @@ export const api = {
     } catch { return []; }
   },
 
-  // ADDED: Fetch the encrypted key
   getKey: async () => {
     try {
-      return await apiClient.get(appendSecret('/key'));
+      return await apiClient.get(ENDPOINTS.key());
     } catch (error) { throw error; }
   },
 
-  // ADDED: Fetch the encrypted stream data
-  getStream: async (episodeId, mode = CONFIG.defaultStreamMode, source = CONFIG.defaultSource) => {
+  getStream: async (episodeId, mode = APP_CONFIG.DEFAULT_STREAM_MODE, source = APP_CONFIG.DEFAULT_SOURCE) => {
     try {
-      return await apiClient.get(appendSecret(`/stream?id=${encodeURIComponent(episodeId)}&source=${source}&mode=${mode}`));
+      return await apiClient.get(ENDPOINTS.stream(episodeId, mode, source));
     } catch (error) { throw error; }
   }
 };
