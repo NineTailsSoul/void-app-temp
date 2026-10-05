@@ -62,7 +62,7 @@ export default function PlayerScreen({ route, navigation }) {
       setSubtitles([]);
       setShowSettings(false);
       setSelectedQuality('auto');
-      setSelectedSubIndex(0); // Default to first subtitle
+      setSelectedSubIndex(0);
 
       try {
         const [streamData, mainKeyHex] = await Promise.all([
@@ -90,17 +90,32 @@ export default function PlayerScreen({ route, navigation }) {
     return () => { isMounted = false; };
   }, [currentEpisodeId, mode]);
 
-  // Map Data-URI subtitles. Memoized to prevent array re-renders breaking the native view.
   const textTracks = useMemo(() => {
-    return subtitles.map((sub, index) => ({
-      title: sub.label || `Track ${index + 1}`,
-      language: sub.language || 'en',
-      type: TextTrackType.VTT,
-      uri: sub.dataUri || sub.url 
-    }));
+    return subtitles.map((sub, index) => {
+      // Search both the label AND the original URL for language clues
+      const searchStr = ((sub.label || '') + ' ' + (sub.originalUrl || sub.url || '')).toLowerCase();
+      
+      let langCode = 'en';
+      let langName = 'English';
+
+      if (searchStr.includes('spa')) { langCode = 'es'; langName = 'Spanish'; }
+      else if (searchStr.includes('por')) { langCode = 'pt'; langName = 'Portuguese'; }
+      else if (searchStr.includes('ger') || searchStr.includes('deu')) { langCode = 'de'; langName = 'German'; }
+      else if (searchStr.includes('fre') || searchStr.includes('fra')) { langCode = 'fr'; langName = 'French'; }
+      else if (searchStr.includes('ita')) { langCode = 'it'; langName = 'Italian'; }
+      else if (searchStr.includes('ara')) { langCode = 'ar'; langName = 'Arabic'; }
+      else if (searchStr.includes('rus')) { langCode = 'ru'; langName = 'Russian'; }
+      else if (searchStr.includes('eng') || searchStr.includes('en')) { langCode = 'en'; langName = 'English'; }
+
+      return {
+        title: sub.label || langName, // Forces a valid title so ExoPlayer doesn't say "Unknown"
+        language: langCode,           // Forces the 2-letter ISO code ExoPlayer requires
+        type: TextTrackType.VTT,      // FIX: Use proper enum to map subtitle parsing
+        uri: sub.url
+      };
+    });
   }, [subtitles]);
 
-  // Strictly parse heights as base-10 integers
   const handleVideoLoad = (data) => {
     if (data.videoTracks && data.videoTracks.length > 0) {
       const heights = [...new Set(data.videoTracks.map(t => parseInt(t.height, 10)))].filter(h => h > 0);
@@ -166,6 +181,7 @@ export default function PlayerScreen({ route, navigation }) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
       
+      {/* Top spacer clearing status bar and notch */}
       <View style={{ height: insets.top + 48, backgroundColor: '#09090b' }} />
 
       <View style={styles.videoContainer}>
@@ -182,12 +198,11 @@ export default function PlayerScreen({ route, navigation }) {
             }}
             onLoad={handleVideoLoad}
             textTracks={textTracks}
-            // FIXED: Using array 'index' type instead of 'title' for strict binding
             selectedTextTrack={{
-              type: selectedSubIndex === -1 || textTracks.length === 0 ? "disabled" : "index",
-              value: selectedSubIndex !== -1 && textTracks.length > 0 ? selectedSubIndex : undefined
+              type: selectedSubIndex === -1 || textTracks.length === 0 ? "disabled" : "language",
+              value: selectedSubIndex !== -1 && textTracks.length > 0 ? textTracks[selectedSubIndex].language : undefined
             }}
-            // FIXED: Force parsing to base-10 integer
+
             selectedVideoTrack={{
               type: selectedQuality === 'auto' ? 'auto' : 'resolution',
               value: selectedQuality === 'auto' ? undefined : parseInt(selectedQuality, 10)
@@ -214,7 +229,7 @@ export default function PlayerScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Custom Header Overlay */}
+        {/* Top Header Overlay */}
         {!showSettings && (
           <LinearGradient 
             colors={['rgba(0,0,0,0.85)', 'rgba(0,0,0,0.4)', 'transparent']} 
@@ -252,7 +267,7 @@ export default function PlayerScreen({ route, navigation }) {
           </LinearGradient>
         )}
 
-        {/* Settings Modal Overlay */}
+        {/* Modal Overlay for Stream Settings */}
         {showSettings && (
           <View style={styles.settingsOverlay}>
             <View style={styles.settingsPanel}>
@@ -317,6 +332,7 @@ export default function PlayerScreen({ route, navigation }) {
         )}
       </View>
 
+      {/* Episodes Section */}
       <View style={styles.episodesSection}>
         <View style={styles.episodesHeader}>
           <Text style={styles.episodesTitle}>EPISODES</Text>
