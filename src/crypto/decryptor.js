@@ -1,6 +1,75 @@
 import { Buffer } from 'buffer';
-import RNFS from 'react-native-fs';
 import { decryptAESGCM } from './cryptoHelpers';
+
+function timeToSeconds(timeStr) {
+  const parts = timeStr.split(':');
+  let seconds = 0;
+  if (parts.length === 3) {
+    seconds += parseFloat(parts[0]) * 3600; 
+    seconds += parseFloat(parts[1]) * 60;   
+    seconds += parseFloat(parts[2].replace(',', '.')); 
+  } else if (parts.length === 2) {
+    seconds += parseFloat(parts[0]) * 60;
+    seconds += parseFloat(parts[1].replace(',', '.'));
+  }
+  return seconds;
+}
+
+function parseVttToJSON(vttText) {
+  const cues = [];
+  const blocks = vttText.replace(/\r/g, '').split(/\n\s*\n/);
+
+  blocks.forEach(block => {
+    const lines = block.split('\n');
+    const timeLineIndex = lines.findIndex(l => l.includes('-->'));
+    if (timeLineIndex === -1) return; 
+
+    const timeLine = lines[timeLineIndex];
+    const textLines = lines.slice(timeLineIndex + 1).join('\n');
+
+    const timeRegex = /([\d:,.]+)\s*-->\s*([\d:,.]+)\s*(.*)/;
+    const match = timeLine.match(timeRegex);
+
+    if (match) {
+      const start = timeToSeconds(match[1]);
+      const end = timeToSeconds(match[2]);
+      const settingsStr = match[3] || '';
+
+      // FIX 1: Split Flexbox alignment (alignItems) and text alignment (textAlign)
+      let dynamicStyle = { 
+        bottom: '10%', 
+        left: '5%', 
+        right: '5%', 
+        alignItems: 'center', // Centers the container
+        textAlign: 'center'   // Centers the text inside the container
+      };
+
+      if (settingsStr.includes('line:')) {
+        const lineMatch = settingsStr.match(/line:(\d+)%/);
+        if (lineMatch) {
+          dynamicStyle.bottom = undefined;
+          dynamicStyle.top = `${lineMatch[1]}%`;
+        }
+      }
+      
+      if (settingsStr.includes('align:start') || settingsStr.includes('align:left')) {
+        dynamicStyle.alignItems = 'flex-start';
+        dynamicStyle.textAlign = 'left';
+      } else if (settingsStr.includes('align:end') || settingsStr.includes('align:right')) {
+        dynamicStyle.alignItems = 'flex-end';
+        dynamicStyle.textAlign = 'right';
+      }
+
+      const cleanText = textLines.replace(/<[^>]+>/g, '').trim();
+
+      if (cleanText) {
+        cues.push({ start, end, text: cleanText, style: dynamicStyle });
+      }
+    }
+  });
+
+  return cues;
+}
 
 export async function processSecureStream(streamData, keyHex) {
   try {
@@ -22,40 +91,16 @@ export async function processSecureStream(streamData, keyHex) {
         try {
           const response = await fetch(decSubUrl, { headers: spoofedHeaders });
           let vttText = await response.text();
-
+          
           vttText = vttText.replace(/^\uFEFF/, '').trimStart();
-          
-          // FIX: Strip the invisible character/space before WEBVTT
-          vttText = vttText.trimStart();
-          
-          // 1. SANITIZE: Strip hidden Windows carriage returns that corrupt timestamps
-          vttText = vttText.replace(/\r/g, '');
-          
-          // 2. PARSE: Fix both sides of the '-->' securely
-          vttText = vttText.split('\n').map(line => {
-            if (line.includes('-->')) {
-              return line.split('-->').map(part => {
-                let t = part.trim();
-                // If it's missing the hour prefix (MM:SS.mmm), safely prepend '00:'
-                if (t.split(':').length === 2) {
-                  return '00:' + t;
-                }
-                return t;
-              }).join(' --> ');
-            }
-            return line;
-          }).join('\n');
-
-          const localPath = `${RNFS.CachesDirectoryPath}/sub_${Date.now()}_${i}.vtt`;
-          await RNFS.writeFile(localPath, vttText, 'utf8');
+          const parsedCues = parseVttToJSON(vttText);
 
           subtitleTracks.push({
-            label: sub.label || '', 
-            url: `file://${localPath}`,
-            originalUrl: decSubUrl // We pass this to extract the language in the UI
+            label: sub.label || `Track ${i + 1}`,
+            cues: parsedCues 
           });
         } catch (fetchErr) {
-          console.error(`[Decryptor] Fetch failed:`, fetchErr);
+          console.error(`[Decryptor] Subtitle Fetch failed:`, fetchErr);
         }
       }
     }
